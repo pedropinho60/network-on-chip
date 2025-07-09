@@ -4,6 +4,14 @@
 #include <cstdlib>
 #include <ctime>
 
+// printar caminho feito pelos pacotes
+//
+// adicionar arbitragem
+//
+// calcular latência média
+//
+// contar tempo em ciclos a partir do envio do pacote
+
 using namespace sc_core;
 using namespace std;
 
@@ -57,21 +65,25 @@ SC_MODULE(Router) {
     sc_fifo_out<Packet> out[5];
     int x, y;
 
+    int direction = 0;
+
     void process() {
         while (true) {
-            for (int i = 0; i < 5; ++i) {
-                if (in[i].num_available() > 0) {
-                    Packet pkt = in[i].read();
+            for(int i = 0; i < 5; i++) {
+                int current_dir = (direction + i) % 5;
+                if (in[current_dir].num_available() > 0) {
+                    Packet pkt = in[current_dir].read();
                     int dir = route(pkt);
                     wait(1, SC_NS);
                     out[dir].write(pkt);
+                    direction = (current_dir + 1) % 5;
                     break;
                 }
             }
             wait(1, SC_NS);
         }
     }
-    
+
     int route(Packet pkt) {
         if (algorithm == XY) {
             if (pkt.dst_x > x) return EAST;
@@ -81,9 +93,9 @@ SC_MODULE(Router) {
             return LOCAL;
         } else {
             if (pkt.dst_x == x && pkt.dst_y == y) return LOCAL;
-            
+
             if (pkt.dst_x < x) return WEST;
-            
+
             vector<int> options;
             if (pkt.dst_x > x) options.push_back(EAST);
             if (pkt.dst_y > y) options.push_back(SOUTH);
