@@ -1,32 +1,25 @@
 #include <systemc>
 #include <iostream>
-#include <vector>
 #include <cstdlib>
 #include <ctime>
 
-// printar caminho feito pelos pacotes
-//
-// adicionar arbitragem
-//
-// calcular latência média
-//
-// contar tempo em ciclos a partir do envio do pacote
-
 using namespace sc_core;
 using namespace std;
+
+#define ALGORITHM XY
 
 enum Direction {NORTH = 0, SOUTH = 1, EAST = 2, WEST = 3, LOCAL = 4};
 enum RoutingAlgorithm {XY = 0, WEST_FIRST = 1};
 
 struct Packet {
-    int src_x, src_y;
-    int dst_x, dst_y;
+    int src_i, src_j;
+    int dst_i, dst_j;
     int payload;
 };
 
 ostream& operator<<(ostream& os, const Packet& pkt) {
-    os << "[src=(" << pkt.src_x << "," << pkt.src_y << ")"
-       << " dst=(" << pkt.dst_x << "," << pkt.dst_y << ")"
+    os << "[src=(" << pkt.src_i << "," << pkt.src_j << ")"
+       << " dst=(" << pkt.dst_i << "," << pkt.dst_j << ")"
        << " payload=" << pkt.payload << "]";
     return os;
 }
@@ -34,13 +27,19 @@ ostream& operator<<(ostream& os, const Packet& pkt) {
 SC_MODULE(Node) {
     sc_fifo_out<Packet> out;
     sc_fifo_in<Packet> in;
-    int x, y;
+    int i, j;
 
     void send_packets() {
         wait(100, SC_NS);
-        Packet pkt = {x, y, rand() % 4, rand() % 4, rand() % 100};
-        if (pkt.dst_x == x && pkt.dst_y == y) return;
-        cout << sc_time_stamp() << ": Node(" << x << "," << y
+        bool flag = false;
+        Packet pkt;
+        
+        while (!flag) {
+            pkt = {i, j, rand() % 4, rand() % 4, rand() % 100};
+            if (pkt.dst_i != i || pkt.dst_j != j) flag = true;
+        }
+        
+        cout << sc_time_stamp() << ": Node(" << i << "," << j
                 << ") sends " << pkt << endl;
         out.write(pkt);
     }
@@ -48,7 +47,7 @@ SC_MODULE(Node) {
     void consume_packets() {
         while (true) {
             Packet pkt = in.read();
-            cout << sc_time_stamp() << ": Node(" << x << "," << y
+            cout << sc_time_stamp() << ": Node(" << i << "," << j
                     << ") received " << pkt << endl;
         }
     }
@@ -63,7 +62,7 @@ SC_MODULE(Router) {
     RoutingAlgorithm algorithm;
     sc_fifo_in<Packet> in[5];
     sc_fifo_out<Packet> out[5];
-    int x, y;
+    int i, j;
 
     int direction = 0;
 
@@ -86,22 +85,17 @@ SC_MODULE(Router) {
 
     int route(Packet pkt) {
         if (algorithm == XY) {
-            if (pkt.dst_x > x) return EAST;
-            if (pkt.dst_x < x) return WEST;
-            if (pkt.dst_y > y) return SOUTH;
-            if (pkt.dst_y < y) return NORTH;
+            if (pkt.dst_j > j) return EAST;
+            if (pkt.dst_j < j) return WEST;
+            if (pkt.dst_i > i) return SOUTH;
+            if (pkt.dst_i < i) return NORTH;
             return LOCAL;
         } else {
-            if (pkt.dst_x == x && pkt.dst_y == y) return LOCAL;
-
-            if (pkt.dst_x < x) return WEST;
-
-            vector<int> options;
-            if (pkt.dst_x > x) options.push_back(EAST);
-            if (pkt.dst_y > y) options.push_back(SOUTH);
-            if (pkt.dst_y < y) options.push_back(NORTH);
-            if (options.empty()) return LOCAL;
-            return options[0];
+            if (pkt.dst_j < j) return WEST;
+            if (pkt.dst_i < i) return NORTH;
+            if (pkt.dst_i > i) return SOUTH;
+            if (pkt.dst_j > j) return EAST;
+            return LOCAL;
         }
     }
 
@@ -146,14 +140,14 @@ SC_MODULE(Network) {
             for (int j = 0; j < N; ++j) {
                 string rname = "R_" + to_string(i) + "_" + to_string(j);
                 routers[i][j] = new Router(rname.c_str());
-                routers[i][j]->x = j;
-                routers[i][j]->y = i;
-                routers[i][j]->algorithm = XY;  // ou RANDOM
+                routers[i][j]->i = i;
+                routers[i][j]->j = j;
+                routers[i][j]->algorithm = ALGORITHM;
 
                 string nname = "N_" + to_string(i) + "_" + to_string(j);
                 nodes[i][j] = new Node(nname.c_str());
-                nodes[i][j]->x = j;
-                nodes[i][j]->y = i;
+                nodes[i][j]->i = i;
+                nodes[i][j]->j = j;
 
                 channel_router_to_node[i][j] = new sc_fifo<Packet>(1);
                 channel_node_to_router[i][j] = new sc_fifo<Packet>(1);
@@ -204,7 +198,6 @@ SC_MODULE(Network) {
                 }
             }
         }
-
     };
 };
 
