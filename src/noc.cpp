@@ -1,3 +1,4 @@
+#include <sysc/kernel/sc_simcontext.h>
 #include <systemc>
 #include <iostream>
 #include <cstdlib>
@@ -7,6 +8,7 @@ using namespace sc_core;
 using namespace std;
 
 #define ALGORITHM XY
+#define SIZE 3
 
 enum Direction {NORTH = 0, SOUTH = 1, EAST = 2, WEST = 3, LOCAL = 4};
 enum RoutingAlgorithm {XY = 0, WEST_FIRST = 1};
@@ -15,12 +17,13 @@ struct Packet {
     int src_i, src_j;
     int dst_i, dst_j;
     int payload;
+    sc_time initial_time;
 };
 
 ostream& operator<<(ostream& os, const Packet& pkt) {
     os << "[src=(" << pkt.src_i << "," << pkt.src_j << ")"
        << " dst=(" << pkt.dst_i << "," << pkt.dst_j << ")"
-       << " payload=" << pkt.payload << "]";
+       << " payload=" << pkt.payload << " latency=" << sc_time_stamp() - pkt.initial_time << "]";
     return os;
 }
 
@@ -31,13 +34,9 @@ SC_MODULE(Node) {
 
     void send_packets() {
         wait(100, SC_NS);
-        bool flag = false;
         Packet pkt;
         
-        while (!flag) {
-            pkt = {i, j, rand() % 4, rand() % 4, rand() % 100};
-            if (pkt.dst_i != i || pkt.dst_j != j) flag = true;
-        }
+        pkt = {i, j, rand() % SIZE, rand() % SIZE, rand() % 100};
         
         cout << sc_time_stamp() << ": Node(" << i << "," << j
                 << ") sends " << pkt << endl;
@@ -68,8 +67,8 @@ SC_MODULE(Router) {
 
     void process() {
         while (true) {
-            for(int i = 0; i < 5; i++) {
-                int current_dir = (direction + i) % 5;
+            for(int k = 0; k < 5; k++) {
+                int current_dir = (direction + k) % 5;
                 if (in[current_dir].num_available() > 0) {
                     Packet pkt = in[current_dir].read();
                     int dir = route(pkt);
@@ -105,7 +104,7 @@ SC_MODULE(Router) {
 };
 
 SC_MODULE(Network) {
-    const static int N = 4;
+    const static int N = SIZE;
     Router* routers[N][N];
     Node* nodes[N][N];
 
